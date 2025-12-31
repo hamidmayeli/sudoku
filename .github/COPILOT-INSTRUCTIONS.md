@@ -23,6 +23,19 @@ This project is built with React 18+ and TypeScript, following modern best pract
 - **Vite** - Build tool (recommended) or Create React App
 - **ESLint** - Code linting
 
+### Project details
+- It should be responsive and usable on both desktop and mobile devices.
+- It should function offline using service workers (PWA).
+- There should be a starting page with options to start a new game with different difficulty levels (easy, medium, hard).
+- The progress should be saved in local storage so that users can continue their game later.
+- There should be a switch to toggle between light and dark themes.
+- There should be an option to fill in notes for each cell.
+  - Notes should be displayed in a smaller font within the cell.
+  - Each cell should allow multiple notes.
+- Incorrect entries should be highlighted in red.
+- Although it supports keyboard input, there should also be an on-screen numeric keypad for easier input on mobile devices.
+- There should be a hint feature that fills in a correct number in a selected cell.
+
 ---
 
 ## 🚀 Getting Started
