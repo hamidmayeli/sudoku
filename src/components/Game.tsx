@@ -128,23 +128,14 @@ export const Game: React.FC = () => {
           const isCorrect = validateCell(newBoard, prev.solution, row, col);
           newBoard[row][col].isIncorrect = !isCorrect;
 
-          if (!isCorrect) {
-            return {
-              ...prev,
-              board: newBoard,
-              mistakes: prev.mistakes + 1
-            };
-          }
-
           // Check if complete
           const complete = isBoardComplete(newBoard, prev.solution);
-          if (complete) {
-            return {
-              ...prev,
-              board: newBoard,
-              isComplete: true
-            };
-          }
+          
+          return {
+            ...prev,
+            board: newBoard,
+            isComplete: complete
+          };
         }
 
         return {
