@@ -8,11 +8,11 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['vite.svg'],
+      includeAssets: ['icon.svg'],
       manifest: {
-        name: 'Sudoku App',
+        name: 'Sudoku',
         short_name: 'Sudoku',
-        description: 'A Sudoku game built with React and TypeScript',
+        description: 'A Sudoku game with no ads and offline support',
         theme_color: '#ffffff',
         background_color: '#ffffff',
         display: 'standalone',
