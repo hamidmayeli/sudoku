@@ -1,5 +1,6 @@
 export type CellValue = number | null;
 export type Difficulty = 'easy' | 'medium' | 'hard';
+export type InputMode = 'cell-first' | 'number-first';
 
 export interface CellData {
   value: CellValue;
@@ -18,4 +19,9 @@ export interface GameState {
   showIncorrect: boolean;
   notesMode: boolean;
   isComplete: boolean;
+  history: Board[];
+  historyIndex: number;
+  snapshots: Board[];
+  inputMode: InputMode;
+  selectedNumber: number | null;
 }

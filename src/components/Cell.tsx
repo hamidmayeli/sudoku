@@ -7,6 +7,7 @@ interface CellProps {
   col: number;
   isSelected: boolean;
   showIncorrect: boolean;
+  isHighlighted: boolean;
   onClick: () => void;
 }
 
@@ -16,12 +17,14 @@ export const Cell: React.FC<CellProps> = ({
   col,
   isSelected,
   showIncorrect,
+  isHighlighted,
   onClick
 }) => {
   const getClassName = (): string => {
     const classes = ['cell'];
     
     if (isSelected) classes.push('selected');
+    if (isHighlighted) classes.push('highlighted');
     if (cell.isInitial) classes.push('initial');
     if (showIncorrect && cell.isIncorrect) classes.push('incorrect');
     

@@ -6,6 +6,7 @@ interface BoardProps {
   board: BoardType;
   selectedCell: { row: number; col: number } | null;
   showIncorrect: boolean;
+  highlightedValue: number | null;
   onCellClick: (row: number, col: number) => void;
 }
 
@@ -13,8 +14,18 @@ export const Board: React.FC<BoardProps> = ({
   board,
   selectedCell,
   showIncorrect,
+  highlightedValue,
   onCellClick
 }) => {
+  const isCellHighlighted = (cell: BoardType[0][0]): boolean => {
+    if (highlightedValue === null) return false;
+    // Check if cell value matches
+    if (cell.value === highlightedValue) return true;
+    // Check if cell has the value in notes
+    if (cell.notes.has(highlightedValue)) return true;
+    return false;
+  };
+
   return (
     <div className="board">
       {board.map((row, rowIdx) => (
@@ -29,6 +40,7 @@ export const Board: React.FC<BoardProps> = ({
                 selectedCell?.row === rowIdx && selectedCell?.col === colIdx
               }
               showIncorrect={showIncorrect}
+              isHighlighted={isCellHighlighted(cell)}
               onClick={() => onCellClick(rowIdx, colIdx)}
             />
           ))}

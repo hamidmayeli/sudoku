@@ -65,18 +65,34 @@ export const Game: React.FC = () => {
   const [gameState, setGameState] = useState<GameState>(() => {
     // Try to load from localStorage first
     const saved = loadGameFromStorage();
-    if (saved) return saved;
+    if (saved) {
+      // Ensure history and snapshots exist
+      return {
+        ...saved,
+        history: saved.history || [saved.board],
+        historyIndex: saved.historyIndex ?? 0,
+        snapshots: saved.snapshots || [],
+        inputMode: saved.inputMode || 'cell-first',
+        selectedNumber: saved.selectedNumber || null
+      };
+    }
     
     // Generate new game if no saved state
     const { puzzle, solution } = generateGame('medium');
+    const initialBoard = convertToBoard(puzzle);
     return {
-      board: convertToBoard(puzzle),
+      board: initialBoard,
       solution,
       selectedCell: null,
       difficulty: 'medium',
       showIncorrect: true,
       notesMode: false,
-      isComplete: false
+      isComplete: false,
+      history: [initialBoard],
+      historyIndex: 0,
+      snapshots: [],
+      inputMode: 'cell-first',
+      selectedNumber: null
     };
   });
 
@@ -87,7 +103,19 @@ export const Game: React.FC = () => {
 
   // Handle cell selection
   const handleCellClick = (row: number, col: number): void => {
-    if (!gameState.board[row][col].isInitial) {
+    if (gameState.inputMode === 'number-first') {
+      // In number-first mode, prevent editing initial cells
+      if (gameState.board[row][col].isInitial) return;
+      
+      // Clicking a cell fills it with the selected number
+      if (gameState.selectedNumber === 0) {
+        // 0 is used as a special value for clear action
+        handleClearCellAt(row, col);
+      } else if (gameState.selectedNumber !== null) {
+        handleNumberInputAtCell(row, col, gameState.selectedNumber);
+      }
+    } else {
+      // In cell-first mode, clicking a cell selects it (including initial cells for highlighting)
       setGameState(prev => ({
         ...prev,
         selectedCell: { row, col }
@@ -95,9 +123,127 @@ export const Game: React.FC = () => {
     }
   };
 
+  // Helper function to clear a specific cell
+  const handleClearCellAt = useCallback((row: number, col: number): void => {
+    setGameState(prev => {
+      if (
+        prev.isComplete ||
+        prev.board[row][col].isInitial
+      ) {
+        return prev;
+      }
+
+      const newBoard = prev.board.map(r => r.map(c => ({ ...c, notes: new Set(c.notes) })));
+      newBoard[row][col].value = null;
+      newBoard[row][col].isIncorrect = false;
+      newBoard[row][col].notes.clear();
+
+      // Add to history
+      const newHistory = prev.history.slice(0, prev.historyIndex + 1);
+      newHistory.push(newBoard);
+
+      return {
+        ...prev,
+        board: newBoard,
+        history: newHistory,
+        historyIndex: newHistory.length - 1
+      };
+    });
+  }, []);
+
+  // Helper function to input number at specific cell
+  const handleNumberInputAtCell = useCallback((row: number, col: number, num: number): void => {
+    setGameState(prev => {
+      if (
+        prev.isComplete ||
+        prev.board[row][col].isInitial
+      ) {
+        return prev;
+      }
+
+      const newBoard = prev.board.map(r => r.map(c => ({ ...c, notes: new Set(c.notes) })));
+
+      if (prev.notesMode) {
+        // Toggle note
+        if (newBoard[row][col].notes.has(num)) {
+          newBoard[row][col].notes.delete(num);
+        } else {
+          newBoard[row][col].notes.add(num);
+        }
+      } else {
+        // Set value
+        newBoard[row][col].value = num;
+        newBoard[row][col].notes.clear();
+
+        // Check if incorrect
+        const isCorrect = validateCell(newBoard, prev.solution, row, col);
+        newBoard[row][col].isIncorrect = !isCorrect;
+
+        // Check if complete
+        const complete = isBoardComplete(newBoard, prev.solution);
+        
+        // Add to history
+        const newHistory = prev.history.slice(0, prev.historyIndex + 1);
+        newHistory.push(newBoard);
+        
+        return {
+          ...prev,
+          board: newBoard,
+          isComplete: complete,
+          history: newHistory,
+          historyIndex: newHistory.length - 1
+        };
+      }
+
+      // Add to history for notes mode too
+      const newHistory = prev.history.slice(0, prev.historyIndex + 1);
+      newHistory.push(newBoard);
+      
+      return {
+        ...prev,
+        board: newBoard,
+        history: newHistory,
+        historyIndex: newHistory.length - 1
+      };
+    });
+  }, []);
+
   // Handle number input
   const handleNumberInput = useCallback(
     (num: number): void => {
+      if (gameState.inputMode === 'number-first') {
+        // In number-first mode, clicking a number selects it
+        setGameState(prev => ({
+          ...prev,
+          selectedNumber: prev.selectedNumber === num ? null : num
+        }));
+      } else {
+        // In cell-first mode, clicking a number fills the selected cell
+        if (
+          !gameState.selectedCell ||
+          gameState.isComplete ||
+          gameState.board[gameState.selectedCell.row][gameState.selectedCell.col].isInitial
+        ) {
+          return;
+        }
+
+        const { row, col } = gameState.selectedCell;
+        handleNumberInputAtCell(row, col, num);
+      }
+    },
+    [gameState.inputMode, gameState.selectedCell, gameState.isComplete, gameState.board, handleNumberInputAtCell]
+  );
+
+  // Handle cell clear
+  const handleClearCell = useCallback((): void => {
+    if (gameState.inputMode === 'number-first') {
+      // In number-first mode, toggle clear mode (0 represents clear)
+      setGameState(prev => ({
+        ...prev,
+        selectedNumber: prev.selectedNumber === 0 ? null : 0
+      }));
+    } else {
+      // In cell-first mode, clear the selected cell
       if (
         !gameState.selectedCell ||
         gameState.isComplete ||
@@ -108,70 +254,9 @@ export const Game: React.FC = () => {
       }
 
       const { row, col } = gameState.selectedCell;
-
-      setGameState(prev => {
-        const newBoard = prev.board.map(r => r.map(c => ({ ...c, notes: new Set(c.notes) })));
-
-        if (prev.notesMode) {
-          // Toggle note
-          if (newBoard[row][col].notes.has(num)) {
-            newBoard[row][col].notes.delete(num);
-          } else {
-            newBoard[row][col].notes.add(num);
-          }
-        } else {
-          // Set value
-          newBoard[row][col].value = num;
-          newBoard[row][col].notes.clear();
-
-          // Check if incorrect
-          const isCorrect = validateCell(newBoard, prev.solution, row, col);
-          newBoard[row][col].isIncorrect = !isCorrect;
-
-          // Check if complete
-          const complete = isBoardComplete(newBoard, prev.solution);
-          
-          return {
-            ...prev,
-            board: newBoard,
-            isComplete: complete
-          };
-        }
-
-        return {
-          ...prev,
-          board: newBoard
-        };
-      });
-    },
-    [gameState.selectedCell, gameState.isComplete, gameState.board]
-  );
-
-  // Handle cell clear
-  const handleClearCell = useCallback((): void => {
-    if (
-      !gameState.selectedCell ||
-      gameState.isComplete ||
-      gameState.board[gameState.selectedCell.row][gameState.selectedCell.col]
-        .isInitial
-    ) {
-      return;
+      handleClearCellAt(row, col);
     }
-
-    const { row, col } = gameState.selectedCell;
-
-    setGameState(prev => {
-      const newBoard = prev.board.map(r => r.map(c => ({ ...c, notes: new Set(c.notes) })));
-      newBoard[row][col].value = null;
-      newBoard[row][col].isIncorrect = false;
-      newBoard[row][col].notes.clear();
-
-      return {
-        ...prev,
-        board: newBoard
-      };
-    });
-  }, [gameState.selectedCell, gameState.isComplete, gameState.board]);
+  }, [gameState.inputMode, gameState.selectedCell, gameState.isComplete, gameState.board, handleClearCellAt]);
 
   // Keyboard navigation
   useEffect(() => {
@@ -220,14 +305,20 @@ export const Game: React.FC = () => {
   // Start new game
   const handleNewGame = (difficulty: Difficulty): void => {
     const { puzzle, solution } = generateGame(difficulty);
+    const initialBoard = convertToBoard(puzzle);
     setGameState({
-      board: convertToBoard(puzzle),
+      board: initialBoard,
       solution,
       selectedCell: null,
       difficulty,
       showIncorrect: gameState.showIncorrect,
       notesMode: false,
-      isComplete: false
+      isComplete: false,
+      history: [initialBoard],
+      historyIndex: 0,
+      snapshots: [],
+      inputMode: gameState.inputMode,
+      selectedNumber: null
     });
     setGameStarted(true);
   };
@@ -248,6 +339,15 @@ export const Game: React.FC = () => {
     }));
   };
 
+  // Toggle input mode
+  const handleToggleInputMode = (): void => {
+    setGameState(prev => ({
+      ...prev,
+      inputMode: prev.inputMode === 'cell-first' ? 'number-first' : 'cell-first',
+      selectedNumber: null // Clear selected number when switching modes
+    }));
+  };
+
   // Get hint
   const handleHint = (): void => {
     if (gameState.isComplete) return;
@@ -265,12 +365,89 @@ export const Game: React.FC = () => {
 
       const complete = isBoardComplete(newBoard, prev.solution);
 
+      // Add to history
+      const newHistory = prev.history.slice(0, prev.historyIndex + 1);
+      newHistory.push(newBoard);
+
       return {
         ...prev,
         board: newBoard,
-        isComplete: complete
+        isComplete: complete,
+        history: newHistory,
+        historyIndex: newHistory.length - 1
       };
     });
+  };
+
+  // Undo
+  const handleUndo = (): void => {
+    if (gameState.historyIndex > 0) {
+      setGameState(prev => {
+        const newIndex = prev.historyIndex - 1;
+        const boardToRestore = prev.history[newIndex];
+        const complete = isBoardComplete(boardToRestore, prev.solution);
+        
+        return {
+          ...prev,
+          board: boardToRestore,
+          historyIndex: newIndex,
+          isComplete: complete
+        };
+      });
+    }
+  };
+
+  // Redo
+  const handleRedo = (): void => {
+    if (gameState.historyIndex < gameState.history.length - 1) {
+      setGameState(prev => {
+        const newIndex = prev.historyIndex + 1;
+        const boardToRestore = prev.history[newIndex];
+        const complete = isBoardComplete(boardToRestore, prev.solution);
+        
+        return {
+          ...prev,
+          board: boardToRestore,
+          historyIndex: newIndex,
+          isComplete: complete
+        };
+      });
+    }
+  };
+
+  // Take snapshot
+  const handleTakeSnapshot = (): void => {
+    setGameState(prev => {
+      const currentBoard = prev.board.map(r => r.map(c => ({ ...c, notes: new Set(c.notes) })));
+      return {
+        ...prev,
+        snapshots: [...prev.snapshots, currentBoard]
+      };
+    });
+  };
+
+  // Undo to last snapshot
+  const handleUndoToSnapshot = (): void => {
+    if (gameState.snapshots.length > 0) {
+      setGameState(prev => {
+        const lastSnapshot = prev.snapshots[prev.snapshots.length - 1];
+        const newSnapshots = prev.snapshots.slice(0, -1);
+        const complete = isBoardComplete(lastSnapshot, prev.solution);
+        
+        // Add to history
+        const newHistory = prev.history.slice(0, prev.historyIndex + 1);
+        newHistory.push(lastSnapshot);
+        
+        return {
+          ...prev,
+          board: lastSnapshot,
+          snapshots: newSnapshots,
+          history: newHistory,
+          historyIndex: newHistory.length - 1,
+          isComplete: complete
+        };
+      });
+    }
   };
 
   if (!gameStarted) {
@@ -290,23 +467,41 @@ export const Game: React.FC = () => {
         notesMode={gameState.notesMode}
         isComplete={gameState.isComplete}
         theme={theme}
+        canUndo={gameState.historyIndex > 0}
+        canRedo={gameState.historyIndex < gameState.history.length - 1}
+        hasSnapshots={gameState.snapshots.length > 0}
+        inputMode={gameState.inputMode}
         onNewGame={handleNewGame}
         onToggleIncorrect={handleToggleIncorrect}
         onToggleNotes={handleToggleNotes}
         onToggleTheme={toggleTheme}
         onHint={handleHint}
+        onUndo={handleUndo}
+        onRedo={handleRedo}
+        onTakeSnapshot={handleTakeSnapshot}
+        onUndoToSnapshot={handleUndoToSnapshot}
+        onToggleInputMode={handleToggleInputMode}
       />
       <div className="board-section">
         <Board
           board={gameState.board}
           selectedCell={gameState.selectedCell}
           showIncorrect={gameState.showIncorrect}
+          highlightedValue={
+            gameState.inputMode === 'number-first'
+              ? gameState.selectedNumber && gameState.selectedNumber !== 0 ? gameState.selectedNumber : null
+              : gameState.selectedCell
+                ? gameState.board[gameState.selectedCell.row][gameState.selectedCell.col].value
+                : null
+          }
           onCellClick={handleCellClick}
         />
         <Keypad
           onNumberClick={handleNumberInput}
           onClear={handleClearCell}
-          disabled={!gameState.selectedCell || gameState.isComplete}
+          disabled={gameState.isComplete || (gameState.inputMode === 'cell-first' && !gameState.selectedCell)}
+          selectedNumber={gameState.inputMode === 'number-first' ? gameState.selectedNumber : undefined}
+          isClearSelected={gameState.inputMode === 'number-first' && gameState.selectedNumber === 0}
         />
       </div>
     </div>
