@@ -10,6 +10,7 @@ interface ControlsProps {
   canRedo: boolean;
   hasSnapshots: boolean;
   inputMode: 'cell-first' | 'number-first';
+  highlightNotes: boolean;
   onNewGame: (difficulty: Difficulty) => void;
   onToggleIncorrect: () => void;
   onToggleNotes: () => void;
@@ -20,6 +21,7 @@ interface ControlsProps {
   onTakeSnapshot: () => void;
   onUndoToSnapshot: () => void;
   onToggleInputMode: () => void;
+  onToggleHighlightNotes: () => void;
 }
 
 type ExpandableSection = "newGame" | "settings" | null;
@@ -33,6 +35,7 @@ export const Controls: React.FC<ControlsProps> = ({
   canRedo,
   hasSnapshots,
   inputMode,
+  highlightNotes,
   onNewGame,
   onToggleIncorrect,
   onToggleNotes,
@@ -42,7 +45,8 @@ export const Controls: React.FC<ControlsProps> = ({
   onRedo,
   onTakeSnapshot,
   onUndoToSnapshot,
-  onToggleInputMode
+  onToggleInputMode,
+  onToggleHighlightNotes
 }) => {
   const [showDifficultyMenu, setShowDifficultyMenu] = useState<ExpandableSection>(null);
 
@@ -100,6 +104,14 @@ export const Controls: React.FC<ControlsProps> = ({
                 onChange={onToggleInputMode}
               />
               <span>Number First Mode</span>
+            </label>
+            <label className="checkbox-label">
+              <input 
+                type="checkbox" 
+                checked={highlightNotes}
+                onChange={onToggleHighlightNotes}
+              />
+              <span>Highlight Notes</span>
             </label>
           </div>
         )}

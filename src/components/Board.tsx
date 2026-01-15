@@ -7,6 +7,7 @@ interface BoardProps {
   selectedCell: { row: number; col: number } | null;
   showIncorrect: boolean;
   highlightedValue: number | null;
+  highlightNotes: boolean;
   onCellClick: (row: number, col: number) => void;
 }
 
@@ -15,6 +16,7 @@ export const Board: React.FC<BoardProps> = ({
   selectedCell,
   showIncorrect,
   highlightedValue,
+  highlightNotes,
   onCellClick
 }) => {
   const isCellHighlighted = (cell: BoardType[0][0]): boolean => {
@@ -22,7 +24,7 @@ export const Board: React.FC<BoardProps> = ({
     // Check if cell value matches
     if (cell.value === highlightedValue) return true;
     // Check if cell has the value in notes
-    if (cell.notes.has(highlightedValue)) return true;
+    if (highlightNotes && cell.notes.has(highlightedValue)) return true;
     return false;
   };
 

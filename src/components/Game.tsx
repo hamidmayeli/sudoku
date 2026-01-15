@@ -92,7 +92,8 @@ export const Game: React.FC = () => {
       historyIndex: 0,
       snapshots: [],
       inputMode: 'cell-first',
-      selectedNumber: null
+      selectedNumber: null,
+      highlightNotes: true
     };
   });
 
@@ -318,7 +319,8 @@ export const Game: React.FC = () => {
       historyIndex: 0,
       snapshots: [],
       inputMode: gameState.inputMode,
-      selectedNumber: null
+      selectedNumber: null,
+      highlightNotes: true
     });
     setGameStarted(true);
   };
@@ -345,6 +347,14 @@ export const Game: React.FC = () => {
       ...prev,
       inputMode: prev.inputMode === 'cell-first' ? 'number-first' : 'cell-first',
       selectedNumber: null // Clear selected number when switching modes
+    }));
+  };
+
+  // Toggle highlight notes
+  const handleToggleHighlightNotes = (): void => {
+    setGameState(prev => ({
+      ...prev,
+      highlightNotes: !prev.highlightNotes
     }));
   };
 
@@ -471,6 +481,7 @@ export const Game: React.FC = () => {
         canRedo={gameState.historyIndex < gameState.history.length - 1}
         hasSnapshots={gameState.snapshots.length > 0}
         inputMode={gameState.inputMode}
+        highlightNotes={gameState.highlightNotes}
         onNewGame={handleNewGame}
         onToggleIncorrect={handleToggleIncorrect}
         onToggleNotes={handleToggleNotes}
@@ -481,6 +492,7 @@ export const Game: React.FC = () => {
         onTakeSnapshot={handleTakeSnapshot}
         onUndoToSnapshot={handleUndoToSnapshot}
         onToggleInputMode={handleToggleInputMode}
+        onToggleHighlightNotes={handleToggleHighlightNotes}
       />
       <div className="board-section">
         <Board
@@ -494,6 +506,7 @@ export const Game: React.FC = () => {
                 ? gameState.board[gameState.selectedCell.row][gameState.selectedCell.col].value
                 : null
           }
+          highlightNotes={gameState.highlightNotes}
           onCellClick={handleCellClick}
         />
         <Keypad

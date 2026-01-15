@@ -24,4 +24,5 @@ export interface GameState {
   snapshots: Board[];
   inputMode: InputMode;
   selectedNumber: number | null;
+  highlightNotes: boolean;
 }
