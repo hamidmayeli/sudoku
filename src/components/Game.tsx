@@ -29,6 +29,25 @@ const loadGameFromStorage = (): GameState | null => {
         notes: new Set(cell.notes)
       }))
     );
+
+    parsed.history = parsed.history.map((board: { notes: number[] }[][]) =>
+      board.map((row: { notes: number[] }[]) =>
+        row.map((cell: { notes: number[] }) => ({
+          ...cell,
+          notes: new Set(cell.notes)
+        }))
+      )
+    );
+
+    parsed.snapshots = parsed.snapshots.map((board: { notes: number[] }[][]) =>
+      board.map((row: { notes: number[] }[]) =>
+        row.map((cell: { notes: number[] }) => ({
+          ...cell,
+          notes: new Set(cell.notes)
+        }))
+      )
+    );
+
     return parsed;
   } catch (error) {
     console.error('Failed to load game from storage:', error);
@@ -47,6 +66,22 @@ const saveGameToStorage = (gameState: GameState): void => {
           ...cell,
           notes: Array.from(cell.notes)
         }))
+      ),
+      history: gameState.history.map(board =>
+        board.map(row =>
+          row.map(cell => ({
+            ...cell,
+            notes: Array.from(cell.notes)
+          }))
+        )
+      ),
+      snapshots: gameState.snapshots.map(board =>
+        board.map(row =>
+          row.map(cell => ({
+            ...cell,
+            notes: Array.from(cell.notes)
+          }))
+        )
       )
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
@@ -99,7 +134,12 @@ export const Game: React.FC = () => {
 
   // Save to localStorage whenever game state changes
   useEffect(() => {
-    saveGameToStorage(gameState);
+    if(gameState.isComplete) {
+      localStorage.removeItem(STORAGE_KEY);
+    }
+    else {
+      saveGameToStorage(gameState);
+    }
   }, [gameState]);
 
   // Handle cell selection
