@@ -3,15 +3,16 @@ import { Board } from './Board';
 import { Controls } from './Controls';
 import { Keypad } from './Keypad';
 import { StartPage } from './StartPage';
-import type { GameState, Difficulty } from '../types/sudoku.types';
+import { HintModal } from './HintModal';
+import type { GameState, Difficulty, HintResult } from '../types/sudoku.types';
 import { useTheme } from '../hooks/useTheme';
 import {
   generateGame,
   convertToBoard,
   isBoardComplete,
-  getHint,
   validateCell
 } from '../utils/sudoku';
+import { getAdvancedHint } from '../utils/hintSolver';
 
 const STORAGE_KEY = 'sudoku-game-state';
 
@@ -96,6 +97,7 @@ export const Game: React.FC = () => {
     const saved = loadGameFromStorage();
     return !!saved;
   });
+  const [currentHint, setCurrentHint] = useState<HintResult | null>(null);
   
   const [gameState, setGameState] = useState<GameState>(() => {
     // Try to load from localStorage first
@@ -398,14 +400,26 @@ export const Game: React.FC = () => {
     }));
   };
 
-  // Get hint
+  // Get hint - show explanation modal
   const handleHint = (): void => {
     if (gameState.isComplete) return;
 
-    const hint = getHint(gameState.board, gameState.solution);
+    const hint = getAdvancedHint(gameState.board, gameState.solution);
     if (!hint) return;
 
-    const { row, col } = hint;
+    // Select the hint cell and show modal
+    setGameState(prev => ({
+      ...prev,
+      selectedCell: { row: hint.row, col: hint.col }
+    }));
+    setCurrentHint(hint);
+  };
+
+  // Apply the hint to the board
+  const applyHint = (): void => {
+    if (!currentHint) return;
+
+    const { row, col } = currentHint;
 
     setGameState(prev => {
       const newBoard = prev.board.map(r => r.map(c => ({ ...c, notes: new Set(c.notes) })));
@@ -427,6 +441,13 @@ export const Game: React.FC = () => {
         historyIndex: newHistory.length - 1
       };
     });
+
+    setCurrentHint(null);
+  };
+
+  // Close hint modal without applying
+  const closeHint = (): void => {
+    setCurrentHint(null);
   };
 
   // Undo
@@ -557,6 +578,13 @@ export const Game: React.FC = () => {
           isClearSelected={gameState.inputMode === 'number-first' && gameState.selectedNumber === 0}
         />
       </div>
+      {currentHint && (
+        <HintModal
+          hint={currentHint}
+          onApply={applyHint}
+          onCancel={closeHint}
+        />
+      )}
     </div>
   );
 };

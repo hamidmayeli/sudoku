@@ -11,6 +11,19 @@ export interface CellData {
 
 export type Board = CellData[][];
 
+export interface HintResult {
+  row: number;
+  col: number;
+  value: number;
+  strategy: string;
+  explanation: string;
+  affectedCells?: { row: number; col: number }[];
+  highlightedRegions?: {
+    type: 'row' | 'col' | 'block';
+    index: number;
+  }[];
+}
+
 export interface GameState {
   board: Board;
   solution: number[][];
