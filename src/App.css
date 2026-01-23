@@ -315,6 +315,24 @@ button.selected {
   background-color: var(--cell-highlight);
 }
 
+.cell.hint-affected {
+  background-color: rgba(251, 191, 36, 0.15);
+}
+
+.cell.hint-target {
+  background-color: rgba(14, 165, 233, 0.2);
+  animation: pulse-hint 1.5s infinite;
+}
+
+@keyframes pulse-hint {
+  0%, 100% {
+    background-color: rgba(14, 165, 233, 0.2);
+  }
+  50% {
+    background-color: rgba(14, 165, 233, 0.35);
+  }
+}
+
 @keyframes shake {
   0%, 100% { transform: translateX(0); }
   25% { transform: translateX(-5px); }
@@ -351,6 +369,27 @@ button.selected {
   font-size: 0.7rem;
   color: var(--text-muted);
   font-weight: 500;
+}
+
+.note-hint-remove {
+  color: #ef4444 !important;
+  font-weight: 700;
+  background-color: rgba(239, 68, 68, 0.15);
+  border-radius: 2px;
+}
+
+.hint-preview-add {
+  color: #10b981 !important;
+  animation: pulse-hint-value 1s infinite;
+}
+
+@keyframes pulse-hint-value {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
 }
 
 /* Board Section */
@@ -513,7 +552,134 @@ button.selected {
   padding: 0.5rem;
 }
 
-/* Hint Modal Styles */
+/* Hint Box Styles */
+.hint-box {
+  background-color: var(--surface-color);
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+  margin-bottom: 1.5rem;
+  border: 2px solid var(--primary-color);
+  animation: slideDown 0.3s ease-out;
+  position: relative;
+}
+
+@keyframes slideDown {
+  from {
+    transform: translateY(-20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.hint-box-header {
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.hint-box-header h3 {
+  margin: 0;
+  font-size: 1.2rem;
+  color: var(--primary-color);
+}
+
+.hint-box-body {
+  padding: 1rem 1.5rem;
+}
+
+.hint-explanation {
+  margin-bottom: 1rem;
+  line-height: 1.6;
+  color: var(--text-color);
+}
+
+.hint-explanation p {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.hint-solution {
+  background-color: var(--cell-bg);
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  display: flex;
+  gap: 1.5rem;
+  margin-bottom: 0.75rem;
+  border: 1px solid var(--border-color);
+}
+
+.hint-cell-info,
+.hint-value-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.hint-value {
+  font-size: 1.8rem;
+  font-weight: bold;
+  color: var(--primary-color);
+}
+
+.hint-value-add {
+  color: #10b981 !important; /* Green for additions */
+}
+
+.hint-value-remove {
+  color: #ef4444 !important; /* Red for removals */
+}
+
+.hint-affected {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.hint-box-actions {
+  display: flex;
+  gap: 0.75rem;
+  padding: 1rem 1.5rem;
+  border-top: 1px solid var(--border-color);
+  justify-content: flex-end;
+}
+
+.hint-button-reject,
+.hint-button-accept {
+  width: 48px;
+  height: 48px;
+  border: none;
+  border-radius: 50%;
+  font-size: 1.5rem;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.hint-button-reject {
+  background-color: #ef4444;
+  color: white;
+}
+
+.hint-button-reject:hover {
+  background-color: #dc2626;
+  transform: scale(1.1);
+}
+
+.hint-button-accept {
+  background-color: #10b981;
+  color: white;
+}
+
+.hint-button-accept:hover {
+  background-color: #059669;
+  transform: scale(1.1);
+}
+
+/* Old Hint Modal Styles - kept for backwards compatibility if needed */
 .hint-modal-overlay {
   position: fixed;
   top: 0;
@@ -633,7 +799,6 @@ button.selected {
 .hint-affected {
   color: var(--text-muted);
   font-size: 0.9rem;
-  margin-top: 0.5rem;
 }
 
 .hint-modal-footer {

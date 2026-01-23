@@ -15,8 +15,11 @@ export interface HintResult {
   row: number;
   col: number;
   value: number;
+  invalidNotes?: number[]; // For remove-note action, all notes to remove from primary cell
+  allCellsWithInvalidNotes?: { row: number; col: number; invalidNotes: number[] }[]; // All cells with invalid notes
   strategy: string;
   explanation: string;
+  action?: 'add-value' | 'add-note' | 'remove-note';
   affectedCells?: { row: number; col: number }[];
   highlightedRegions?: {
     type: 'row' | 'col' | 'block';

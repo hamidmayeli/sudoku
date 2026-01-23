@@ -3,7 +3,7 @@ import { Board } from './Board';
 import { Controls } from './Controls';
 import { Keypad } from './Keypad';
 import { StartPage } from './StartPage';
-import { HintModal } from './HintModal';
+import { HintBox } from './HintBox';
 import type { GameState, Difficulty, HintResult } from '../types/sudoku.types';
 import { useTheme } from '../hooks/useTheme';
 import {
@@ -429,13 +429,32 @@ export const Game: React.FC = () => {
   const applyHint = (): void => {
     if (!currentHint) return;
 
-    const { row, col } = currentHint;
+    const { row, col, value, action, invalidNotes, allCellsWithInvalidNotes } = currentHint;
 
     setGameState(prev => {
       const newBoard = prev.board.map(r => r.map(c => ({ ...c, notes: new Set(c.notes) })));
-      newBoard[row][col].value = prev.solution[row][col];
-      newBoard[row][col].isIncorrect = false;
-      newBoard[row][col].notes.clear();
+      
+      if (action === 'remove-note') {
+        // Remove invalid notes from all cells that have them
+        if (allCellsWithInvalidNotes && allCellsWithInvalidNotes.length > 0) {
+          allCellsWithInvalidNotes.forEach(cellInfo => {
+            cellInfo.invalidNotes.forEach(note => {
+              newBoard[cellInfo.row][cellInfo.col].notes.delete(note);
+            });
+          });
+        } else {
+          // Fallback to single cell
+          const notesToRemove = invalidNotes || [value];
+          notesToRemove.forEach(note => {
+            newBoard[row][col].notes.delete(note);
+          });
+        }
+      } else {
+        // Add value to cell (default behavior)
+        newBoard[row][col].value = prev.solution[row][col];
+        newBoard[row][col].isIncorrect = false;
+        newBoard[row][col].notes.clear();
+      }
 
       const complete = isBoardComplete(newBoard, prev.solution);
 
@@ -599,6 +618,13 @@ export const Game: React.FC = () => {
         onToggleHighlightNotes={handleToggleHighlightNotes}
       />
       <div className="board-section">
+        {currentHint && (
+          <HintBox
+            hint={currentHint}
+            onAccept={applyHint}
+            onReject={closeHint}
+          />
+        )}
         <Board
           board={gameState.board}
           selectedCell={gameState.selectedCell}
@@ -611,6 +637,8 @@ export const Game: React.FC = () => {
           }
           highlightNotes={gameState.highlightNotes}
           onCellClick={handleCellClick}
+          hintAffectedCells={currentHint?.affectedCells || []}
+          currentHint={currentHint}
         />
         <Keypad
           onNumberClick={handleNumberInput}
@@ -621,13 +649,6 @@ export const Game: React.FC = () => {
           disabledDigits={getDisabledDigits()}
         />
       </div>
-      {currentHint && (
-        <HintModal
-          hint={currentHint}
-          onApply={applyHint}
-          onCancel={closeHint}
-        />
-      )}
     </div>
   );
 };

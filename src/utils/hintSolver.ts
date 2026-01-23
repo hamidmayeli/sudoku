@@ -4,8 +4,11 @@ export interface HintResult {
   row: number;
   col: number;
   value: number;
+  invalidNotes?: number[]; // For remove-note action, all notes to remove from primary cell
+  allCellsWithInvalidNotes?: { row: number; col: number; invalidNotes: number[] }[]; // All cells with invalid notes
   strategy: string;
   explanation: string;
+  action?: 'add-value' | 'add-note' | 'remove-note';
   affectedCells?: { row: number; col: number }[];
   highlightedRegions?: {
     type: 'row' | 'col' | 'block';
@@ -82,6 +85,7 @@ export const findNakedSingle = (board: Board): HintResult | null => {
             value,
             strategy: 'Naked Single',
             explanation: `Cell at row ${row + 1}, column ${col + 1} can only be ${value}. All other numbers (1-9) are already present in the same row, column, or 3×3 block, leaving only ${value} as a valid option.`,
+            action: 'add-value',
             affectedCells: [],
             highlightedRegions: [
               { type: 'row', index: row },
@@ -118,6 +122,7 @@ export const findHiddenSingle = (board: Board): HintResult | null => {
           value: num,
           strategy: 'Hidden Single (Row)',
           explanation: `In row ${row + 1}, the number ${num} can only go in column ${col + 1}. Even though this cell may have other candidates, ${num} has no other valid position in this row.`,
+          action: 'add-value',
           affectedCells: Array.from({ length: 9 }, (_, c) => ({ row, col: c })).filter(c => c.col !== col),
           highlightedRegions: [{ type: 'row', index: row }]
         };
@@ -143,6 +148,7 @@ export const findHiddenSingle = (board: Board): HintResult | null => {
           value: num,
           strategy: 'Hidden Single (Column)',
           explanation: `In column ${col + 1}, the number ${num} can only go in row ${row + 1}. Even though this cell may have other candidates, ${num} has no other valid position in this column.`,
+          action: 'add-value',
           affectedCells: Array.from({ length: 9 }, (_, r) => ({ row: r, col })).filter(c => c.row !== row),
           highlightedRegions: [{ type: 'col', index: col }]
         };
@@ -173,6 +179,7 @@ export const findHiddenSingle = (board: Board): HintResult | null => {
           value: num,
           strategy: 'Hidden Single (Block)',
           explanation: `In the 3×3 block starting at row ${blockRow + 1}, column ${blockCol + 1}, the number ${num} can only go in row ${row + 1}, column ${col + 1}. ${num} has no other valid position within this block.`,
+          action: 'add-value',
           affectedCells: [],
           highlightedRegions: [{ type: 'block', index: blockIdx }]
         };
@@ -1155,10 +1162,127 @@ export const findUniqueRectangle = (board: Board): HintResult | null => {
   return null;
 };
 
+// Find invalid notes - notes that cannot be valid based on filled cells in row, col, or block
+export const findInvalidNote = (board: Board): HintResult | null => {
+  const cellsWithInvalidNotes: { row: number; col: number; invalidNotes: number[] }[] = [];
+  const allAffectedCells: { row: number; col: number }[] = [];
+  const affectedCellsSet = new Set<string>();
+
+  // Scan entire board for cells with invalid notes
+  for (let row = 0; row < 9; row++) {
+    for (let col = 0; col < 9; col++) {
+      const cell = board[row][col];
+      
+      // Skip cells with values or no notes
+      if (cell.value !== null || cell.notes.size === 0) continue;
+
+      // Get all values in the same row, column, and block
+      const invalidValues = new Set<number>();
+
+      // Check row
+      for (let c = 0; c < 9; c++) {
+        const val = board[row][c].value;
+        if (val !== null) {
+          invalidValues.add(val);
+        }
+      }
+
+      // Check column
+      for (let r = 0; r < 9; r++) {
+        const val = board[r][col].value;
+        if (val !== null) {
+          invalidValues.add(val);
+        }
+      }
+
+      // Check 3x3 block
+      const blockRow = Math.floor(row / 3) * 3;
+      const blockCol = Math.floor(col / 3) * 3;
+      for (let r = blockRow; r < blockRow + 3; r++) {
+        for (let c = blockCol; c < blockCol + 3; c++) {
+          const val = board[r][c].value;
+          if (val !== null) {
+            invalidValues.add(val);
+          }
+        }
+      }
+
+      // Find all notes that match invalid values for this cell
+      const invalidNotes = Array.from(cell.notes).filter(note => invalidValues.has(note));
+      
+      if (invalidNotes.length > 0) {
+        cellsWithInvalidNotes.push({ row, col, invalidNotes });
+
+        // Collect affected cells for this cell's invalid notes
+        for (const note of invalidNotes) {
+          // Find cells in row with this value
+          for (let c = 0; c < 9; c++) {
+            if (board[row][c].value === note) {
+              const key = `${row},${c}`;
+              if (!affectedCellsSet.has(key)) {
+                allAffectedCells.push({ row, col: c });
+                affectedCellsSet.add(key);
+              }
+            }
+          }
+
+          // Find cells in column with this value
+          for (let r = 0; r < 9; r++) {
+            if (board[r][col].value === note) {
+              const key = `${r},${col}`;
+              if (!affectedCellsSet.has(key)) {
+                allAffectedCells.push({ row: r, col });
+                affectedCellsSet.add(key);
+              }
+            }
+          }
+
+          // Find cells in block with this value
+          for (let r = blockRow; r < blockRow + 3; r++) {
+            for (let c = blockCol; c < blockCol + 3; c++) {
+              if (board[r][c].value === note) {
+                const key = `${r},${c}`;
+                if (!affectedCellsSet.has(key)) {
+                  allAffectedCells.push({ row: r, col: c });
+                  affectedCellsSet.add(key);
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+
+  if (cellsWithInvalidNotes.length === 0) {
+    return null;
+  }
+
+  // Count total invalid notes
+  const totalInvalidNotes = cellsWithInvalidNotes.reduce((sum, cell) => sum + cell.invalidNotes.length, 0);
+  const cellCount = cellsWithInvalidNotes.length;
+  
+  return {
+    row: cellsWithInvalidNotes[0].row, // First cell for display
+    col: cellsWithInvalidNotes[0].col,
+    value: cellsWithInvalidNotes[0].invalidNotes[0],
+    invalidNotes: cellsWithInvalidNotes[0].invalidNotes,
+    allCellsWithInvalidNotes: cellsWithInvalidNotes,
+    strategy: 'Remove Invalid Notes',
+    explanation: `Found ${totalInvalidNotes} invalid note${totalInvalidNotes > 1 ? 's' : ''} across ${cellCount} cell${cellCount > 1 ? 's' : ''}. These notes conflict with values already placed in their row, column, or block and can be safely removed.`,
+    action: 'remove-note',
+    affectedCells: allAffectedCells
+  };
+};
+
 // Main hint function - tries strategies in order of complexity
 export const getAdvancedHint = (board: Board, solution: number[][]): HintResult | null => {
+  // First priority: Remove invalid notes
+  let hint = findInvalidNote(board);
+  if (hint) return hint;
+
   // Try strategies in order of simplicity
-  let hint = findNakedSingle(board);
+  hint = findNakedSingle(board);
   if (hint) return hint;
 
   hint = findHiddenSingle(board);
