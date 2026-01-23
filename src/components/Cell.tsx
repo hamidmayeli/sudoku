@@ -6,7 +6,6 @@ interface CellProps {
   row: number;
   col: number;
   isSelected: boolean;
-  showIncorrect: boolean;
   isHighlighted: boolean;
   onClick: () => void;
 }
@@ -16,7 +15,6 @@ export const Cell: React.FC<CellProps> = ({
   row,
   col,
   isSelected,
-  showIncorrect,
   isHighlighted,
   onClick
 }) => {
@@ -26,7 +24,7 @@ export const Cell: React.FC<CellProps> = ({
     if (isSelected) classes.push('selected');
     if (isHighlighted) classes.push('highlighted');
     if (cell.isInitial) classes.push('initial');
-    if (showIncorrect && cell.isIncorrect) classes.push('incorrect');
+    if (cell.isIncorrect) classes.push('incorrect');
     
     // Add border classes for 3x3 boxes
     if (col % 3 === 2 && col !== 8) classes.push('right-border');

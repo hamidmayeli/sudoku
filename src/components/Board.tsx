@@ -5,7 +5,6 @@ import { Cell } from './Cell';
 interface BoardProps {
   board: BoardType;
   selectedCell: { row: number; col: number } | null;
-  showIncorrect: boolean;
   highlightedValue: number | null;
   highlightNotes: boolean;
   onCellClick: (row: number, col: number) => void;
@@ -14,7 +13,6 @@ interface BoardProps {
 export const Board: React.FC<BoardProps> = ({
   board,
   selectedCell,
-  showIncorrect,
   highlightedValue,
   highlightNotes,
   onCellClick
@@ -41,7 +39,6 @@ export const Board: React.FC<BoardProps> = ({
               isSelected={
                 selectedCell?.row === rowIdx && selectedCell?.col === colIdx
               }
-              showIncorrect={showIncorrect}
               isHighlighted={isCellHighlighted(cell)}
               onClick={() => onCellClick(rowIdx, colIdx)}
             />

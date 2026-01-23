@@ -215,6 +215,62 @@ export const getHint = (board: Board, solution: number[][]): { row: number; col:
   return emptyCells[randomIndex];
 };
 
+// Check if a value creates a duplicate in row, col, or box
+export const hasDuplicate = (
+  board: Board,
+  row: number,
+  col: number
+): boolean => {
+  const value = board[row][col].value;
+  if (value === null) return false;
+
+  // Check row for duplicates
+  for (let c = 0; c < 9; c++) {
+    if (c !== col && board[row][c].value === value) {
+      return true;
+    }
+  }
+
+  // Check column for duplicates
+  for (let r = 0; r < 9; r++) {
+    if (r !== row && board[r][col].value === value) {
+      return true;
+    }
+  }
+
+  // Check 3x3 box for duplicates
+  const boxRow = Math.floor(row / 3) * 3;
+  const boxCol = Math.floor(col / 3) * 3;
+  for (let r = boxRow; r < boxRow + 3; r++) {
+    for (let c = boxCol; c < boxCol + 3; c++) {
+      if ((r !== row || c !== col) && board[r][c].value === value) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+};
+
+// Recalculate isIncorrect flags for all cells in the board
+export const recalculateIncorrectCells = (
+  board: Board,
+  solution: number[][],
+  showIncorrect: boolean
+): void => {
+  for (let row = 0; row < 9; row++) {
+    for (let col = 0; col < 9; col++) {
+      if (board[row][col].value === null) {
+        board[row][col].isIncorrect = false;
+      } else {
+        const isDuplicate = hasDuplicate(board, row, col);
+        const isIncorrectValue = showIncorrect && !validateCell(board, solution, row, col);
+        board[row][col].isIncorrect = isDuplicate || isIncorrectValue;
+      }
+    }
+  }
+};
+
 // Validate current cell against solution
 export const validateCell = (
   board: Board,

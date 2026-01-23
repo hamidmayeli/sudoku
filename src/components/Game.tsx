@@ -10,7 +10,9 @@ import {
   generateGame,
   convertToBoard,
   isBoardComplete,
-  validateCell
+  validateCell,
+  hasDuplicate,
+  recalculateIncorrectCells
 } from '../utils/sudoku';
 import { getAdvancedHint } from '../utils/hintSolver';
 
@@ -218,9 +220,10 @@ export const Game: React.FC = () => {
         newBoard[row][col].value = num;
         newBoard[row][col].notes.clear();
 
-        // Check if incorrect
-        const isCorrect = validateCell(newBoard, prev.solution, row, col);
-        newBoard[row][col].isIncorrect = !isCorrect;
+        // Check if incorrect: duplicates are always marked, solution check depends on showIncorrect
+        const isDuplicate = hasDuplicate(newBoard, row, col);
+        const isIncorrectValue = prev.showIncorrect && !validateCell(newBoard, prev.solution, row, col);
+        newBoard[row][col].isIncorrect = isDuplicate || isIncorrectValue;
 
         // Check if complete
         const complete = isBoardComplete(newBoard, prev.solution);
@@ -369,10 +372,17 @@ export const Game: React.FC = () => {
 
   // Toggle show incorrect
   const handleToggleIncorrect = (): void => {
-    setGameState(prev => ({
-      ...prev,
-      showIncorrect: !prev.showIncorrect
-    }));
+    setGameState(prev => {
+      const newShowIncorrect = !prev.showIncorrect;
+      const newBoard = prev.board.map(r => r.map(c => ({ ...c, notes: new Set(c.notes) })));
+      recalculateIncorrectCells(newBoard, prev.solution, newShowIncorrect);
+      
+      return {
+        ...prev,
+        board: newBoard,
+        showIncorrect: newShowIncorrect
+      };
+    });
   };
 
   // Toggle notes mode
@@ -456,6 +466,7 @@ export const Game: React.FC = () => {
       setGameState(prev => {
         const newIndex = prev.historyIndex - 1;
         const boardToRestore = prev.history[newIndex];
+        recalculateIncorrectCells(boardToRestore, prev.solution, prev.showIncorrect);
         const complete = isBoardComplete(boardToRestore, prev.solution);
         
         return {
@@ -474,6 +485,7 @@ export const Game: React.FC = () => {
       setGameState(prev => {
         const newIndex = prev.historyIndex + 1;
         const boardToRestore = prev.history[newIndex];
+        recalculateIncorrectCells(boardToRestore, prev.solution, prev.showIncorrect);
         const complete = isBoardComplete(boardToRestore, prev.solution);
         
         return {
@@ -503,6 +515,7 @@ export const Game: React.FC = () => {
       setGameState(prev => {
         const lastSnapshot = prev.snapshots[prev.snapshots.length - 1];
         const newSnapshots = prev.snapshots.slice(0, -1);
+        recalculateIncorrectCells(lastSnapshot, prev.solution, prev.showIncorrect);
         const complete = isBoardComplete(lastSnapshot, prev.solution);
         
         // Add to history
@@ -559,7 +572,6 @@ export const Game: React.FC = () => {
         <Board
           board={gameState.board}
           selectedCell={gameState.selectedCell}
-          showIncorrect={gameState.showIncorrect}
           highlightedValue={
             gameState.inputMode === 'number-first'
               ? gameState.selectedNumber && gameState.selectedNumber !== 0 ? gameState.selectedNumber : null
