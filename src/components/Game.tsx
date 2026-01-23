@@ -534,6 +534,36 @@ export const Game: React.FC = () => {
     }
   };
 
+  // Calculate which digits are fully filled (appear 9 times)
+  const getDisabledDigits = (): Set<number> => {
+    // Don't disable digits when in notes mode
+    if (gameState.notesMode) {
+      return new Set<number>();
+    }
+    
+    const digitCounts = new Map<number, number>();
+    
+    // Count occurrences of each digit
+    for (let row = 0; row < 9; row++) {
+      for (let col = 0; col < 9; col++) {
+        const value = gameState.board[row][col].value;
+        if (value !== null) {
+          digitCounts.set(value, (digitCounts.get(value) || 0) + 1);
+        }
+      }
+    }
+    
+    // Find digits that appear 9 times
+    const disabled = new Set<number>();
+    for (let digit = 1; digit <= 9; digit++) {
+      if (digitCounts.get(digit) === 9) {
+        disabled.add(digit);
+      }
+    }
+    
+    return disabled;
+  };
+
   if (!gameStarted) {
     return (
       <StartPage
@@ -588,6 +618,7 @@ export const Game: React.FC = () => {
           disabled={gameState.isComplete || (gameState.inputMode === 'cell-first' && !gameState.selectedCell)}
           selectedNumber={gameState.inputMode === 'number-first' ? gameState.selectedNumber : undefined}
           isClearSelected={gameState.inputMode === 'number-first' && gameState.selectedNumber === 0}
+          disabledDigits={getDisabledDigits()}
         />
       </div>
       {currentHint && (

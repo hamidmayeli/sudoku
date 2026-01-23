@@ -6,6 +6,7 @@ interface KeypadProps {
   disabled: boolean;
   selectedNumber?: number | null;
   isClearSelected?: boolean;
+  disabledDigits?: Set<number>;
 }
 
 export const Keypad: React.FC<KeypadProps> = ({
@@ -13,7 +14,8 @@ export const Keypad: React.FC<KeypadProps> = ({
   onClear,
   disabled,
   selectedNumber,
-  isClearSelected
+  isClearSelected,
+  disabledDigits
 }) => {
   return (
     <div className="keypad">
@@ -22,7 +24,7 @@ export const Keypad: React.FC<KeypadProps> = ({
           key={num}
           className={`keypad-button${selectedNumber === num ? ' selected' : ''}`}
           onClick={() => onNumberClick(num)}
-          disabled={disabled}
+          disabled={disabled || (disabledDigits?.has(num) ?? false)}
         >
           {num}
         </button>
