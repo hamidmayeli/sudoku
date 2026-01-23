@@ -124,13 +124,13 @@ export const Game: React.FC = () => {
       solution,
       selectedCell: null,
       difficulty: 'medium',
-      showIncorrect: true,
+      showIncorrect: false,
       notesMode: false,
       isComplete: false,
       history: [initialBoard],
       historyIndex: 0,
       snapshots: [],
-      inputMode: 'cell-first',
+      inputMode: 'number-first',
       selectedNumber: null,
       highlightNotes: true
     };
