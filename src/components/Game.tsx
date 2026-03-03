@@ -146,163 +146,141 @@ export const Game: React.FC = () => {
     }
   }, [gameState]);
 
-  // Handle cell selection
-  const handleCellClick = (row: number, col: number): void => {
-    if (gameState.inputMode === 'number-first') {
-      // In number-first mode, prevent editing initial cells
-      if (gameState.board[row][col].isInitial) return;
-      
-      // Clicking a cell fills it with the selected number
-      if (gameState.selectedNumber === 0) {
-        // 0 is used as a special value for clear action
-        handleClearCellAt(row, col);
-      } else if (gameState.selectedNumber !== null) {
-        handleNumberInputAtCell(row, col, gameState.selectedNumber);
+  // Pure state-transition: apply a number (value or note) to a cell
+  const applyNumberInput = (state: GameState, row: number, col: number, num: number): GameState => {
+    if (state.isComplete || state.board[row][col].isInitial) {
+      return state;
+    }
+
+    const newBoard = state.board.map(r => r.map(c => ({ ...c, notes: new Set(c.notes) })));
+
+    if (state.notesMode) {
+      // Toggle note
+      if (newBoard[row][col].notes.has(num)) {
+        newBoard[row][col].notes.delete(num);
+      } else {
+        newBoard[row][col].notes.add(num);
       }
     } else {
-      // In cell-first mode, clicking a cell selects it (including initial cells for highlighting)
-      setGameState(prev => ({
-        ...prev,
-        selectedCell: { row, col }
-      }));
-    }
-  };
-
-  // Helper function to clear a specific cell
-  const handleClearCellAt = useCallback((row: number, col: number): void => {
-    setGameState(prev => {
-      if (
-        prev.isComplete ||
-        prev.board[row][col].isInitial
-      ) {
-        return prev;
-      }
-
-      const newBoard = prev.board.map(r => r.map(c => ({ ...c, notes: new Set(c.notes) })));
-      newBoard[row][col].value = null;
-      newBoard[row][col].isIncorrect = false;
+      // Set value
+      newBoard[row][col].value = num;
       newBoard[row][col].notes.clear();
 
-      // Add to history
-      const newHistory = prev.history.slice(0, prev.historyIndex + 1);
-      newHistory.push(newBoard);
+      // Check if incorrect: duplicates are always marked, solution check depends on showIncorrect
+      const isDuplicate = hasDuplicate(newBoard, row, col);
+      const isIncorrectValue = state.showIncorrect && !validateCell(newBoard, state.solution, row, col);
+      newBoard[row][col].isIncorrect = isDuplicate || isIncorrectValue;
+    }
 
-      return {
-        ...prev,
-        board: newBoard,
-        history: newHistory,
-        historyIndex: newHistory.length - 1
-      };
-    });
-  }, []);
+    const complete = isBoardComplete(newBoard, state.solution);
 
-  // Helper function to input number at specific cell
-  const handleNumberInputAtCell = useCallback((row: number, col: number, num: number): void => {
+    // Add to history
+    const newHistory = state.history.slice(0, state.historyIndex + 1);
+    newHistory.push(newBoard);
+
+    return {
+      ...state,
+      board: newBoard,
+      isComplete: complete,
+      history: newHistory,
+      historyIndex: newHistory.length - 1
+    };
+  };
+
+  // Pure state-transition: clear a cell
+  const applyClearCell = (state: GameState, row: number, col: number): GameState => {
+    if (state.isComplete || state.board[row][col].isInitial) {
+      return state;
+    }
+
+    const newBoard = state.board.map(r => r.map(c => ({ ...c, notes: new Set(c.notes) })));
+    newBoard[row][col].value = null;
+    newBoard[row][col].isIncorrect = false;
+    newBoard[row][col].notes.clear();
+
+    // Add to history
+    const newHistory = state.history.slice(0, state.historyIndex + 1);
+    newHistory.push(newBoard);
+
+    return {
+      ...state,
+      board: newBoard,
+      history: newHistory,
+      historyIndex: newHistory.length - 1
+    };
+  };
+
+  // Handle cell selection — all state reads from prev, no stale closure
+  const handleCellClick = useCallback((row: number, col: number): void => {
     setGameState(prev => {
-      if (
-        prev.isComplete ||
-        prev.board[row][col].isInitial
-      ) {
-        return prev;
-      }
+      if (prev.inputMode === 'number-first') {
+        if (prev.board[row][col].isInitial) return prev;
 
-      const newBoard = prev.board.map(r => r.map(c => ({ ...c, notes: new Set(c.notes) })));
-
-      if (prev.notesMode) {
-        // Toggle note
-        if (newBoard[row][col].notes.has(num)) {
-          newBoard[row][col].notes.delete(num);
-        } else {
-          newBoard[row][col].notes.add(num);
+        if (prev.selectedNumber === 0) {
+          return applyClearCell(prev, row, col);
+        } else if (prev.selectedNumber !== null) {
+          return applyNumberInput(prev, row, col, prev.selectedNumber);
         }
+        return prev;
       } else {
-        // Set value
-        newBoard[row][col].value = num;
-        newBoard[row][col].notes.clear();
-
-        // Check if incorrect: duplicates are always marked, solution check depends on showIncorrect
-        const isDuplicate = hasDuplicate(newBoard, row, col);
-        const isIncorrectValue = prev.showIncorrect && !validateCell(newBoard, prev.solution, row, col);
-        newBoard[row][col].isIncorrect = isDuplicate || isIncorrectValue;
-
-        // Check if complete
-        const complete = isBoardComplete(newBoard, prev.solution);
-        
-        // Add to history
-        const newHistory = prev.history.slice(0, prev.historyIndex + 1);
-        newHistory.push(newBoard);
-        
-        return {
-          ...prev,
-          board: newBoard,
-          isComplete: complete,
-          history: newHistory,
-          historyIndex: newHistory.length - 1
-        };
+        // In cell-first mode, clicking a cell selects it (including initial cells for highlighting)
+        return { ...prev, selectedCell: { row, col } };
       }
-
-      // Add to history for notes mode too
-      const newHistory = prev.history.slice(0, prev.historyIndex + 1);
-      newHistory.push(newBoard);
-      
-      return {
-        ...prev,
-        board: newBoard,
-        history: newHistory,
-        historyIndex: newHistory.length - 1
-      };
     });
   }, []);
 
-  // Handle number input
+  // Handle number input — all state reads from prev, no stale closure
   const handleNumberInput = useCallback(
     (num: number): void => {
-      if (gameState.inputMode === 'number-first') {
-        // In number-first mode, clicking a number selects it
-        setGameState(prev => ({
-          ...prev,
-          selectedNumber: prev.selectedNumber === num ? null : num
-        }));
-      } else {
-        // In cell-first mode, clicking a number fills the selected cell
-        if (
-          !gameState.selectedCell ||
-          gameState.isComplete ||
-          gameState.board[gameState.selectedCell.row][gameState.selectedCell.col].isInitial
-        ) {
-          return;
-        }
+      setGameState(prev => {
+        if (prev.inputMode === 'number-first') {
+          // In number-first mode, clicking a number selects it
+          return {
+            ...prev,
+            selectedNumber: prev.selectedNumber === num ? null : num
+          };
+        } else {
+          // In cell-first mode, clicking a number fills the selected cell
+          if (
+            !prev.selectedCell ||
+            prev.isComplete ||
+            prev.board[prev.selectedCell.row][prev.selectedCell.col].isInitial
+          ) {
+            return prev;
+          }
 
-        const { row, col } = gameState.selectedCell;
-        handleNumberInputAtCell(row, col, num);
-      }
+          const { row, col } = prev.selectedCell;
+          return applyNumberInput(prev, row, col, num);
+        }
+      });
     },
-    [gameState.inputMode, gameState.selectedCell, gameState.isComplete, gameState.board, handleNumberInputAtCell]
+    []
   );
 
-  // Handle cell clear
+  // Handle cell clear — all state reads from prev, no stale closure
   const handleClearCell = useCallback((): void => {
-    if (gameState.inputMode === 'number-first') {
-      // In number-first mode, toggle clear mode (0 represents clear)
-      setGameState(prev => ({
-        ...prev,
-        selectedNumber: prev.selectedNumber === 0 ? null : 0
-      }));
-    } else {
-      // In cell-first mode, clear the selected cell
-      if (
-        !gameState.selectedCell ||
-        gameState.isComplete ||
-        gameState.board[gameState.selectedCell.row][gameState.selectedCell.col]
-          .isInitial
-      ) {
-        return;
-      }
+    setGameState(prev => {
+      if (prev.inputMode === 'number-first') {
+        // In number-first mode, toggle clear mode (0 represents clear)
+        return {
+          ...prev,
+          selectedNumber: prev.selectedNumber === 0 ? null : 0
+        };
+      } else {
+        // In cell-first mode, clear the selected cell
+        if (
+          !prev.selectedCell ||
+          prev.isComplete ||
+          prev.board[prev.selectedCell.row][prev.selectedCell.col].isInitial
+        ) {
+          return prev;
+        }
 
-      const { row, col } = gameState.selectedCell;
-      handleClearCellAt(row, col);
-    }
-  }, [gameState.inputMode, gameState.selectedCell, gameState.isComplete, gameState.board, handleClearCellAt]);
+        const { row, col } = prev.selectedCell;
+        return applyClearCell(prev, row, col);
+      }
+    });
+  }, []);
 
   // Keyboard navigation
   useEffect(() => {
