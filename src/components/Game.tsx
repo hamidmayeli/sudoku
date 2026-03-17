@@ -6,12 +6,11 @@ import { StartPage } from './StartPage';
 import { HintBox } from './HintBox';
 import type { GameState, Difficulty, HintResult } from '../types/sudoku.types';
 import { useTheme } from '../hooks/useTheme';
+import { useGameEventBus } from '../hooks/useGameEventBus';
 import {
   generateGame,
   convertToBoard,
   isBoardComplete,
-  validateCell,
-  hasDuplicate,
   recalculateIncorrectCells
 } from '../utils/sudoku';
 import { getAdvancedHint } from '../utils/hintSolver';
@@ -146,141 +145,23 @@ export const Game: React.FC = () => {
     }
   }, [gameState]);
 
-  // Pure state-transition: apply a number (value or note) to a cell
-  const applyNumberInput = (state: GameState, row: number, col: number, num: number): GameState => {
-    if (state.isComplete || state.board[row][col].isInitial) {
-      return state;
-    }
+  // --- Event bus: all cell/number/clear actions flow through here ---
+  const dispatch = useGameEventBus(setGameState);
 
-    const newBoard = state.board.map(r => r.map(c => ({ ...c, notes: new Set(c.notes) })));
-
-    if (state.notesMode) {
-      // Toggle note
-      if (newBoard[row][col].notes.has(num)) {
-        newBoard[row][col].notes.delete(num);
-      } else {
-        newBoard[row][col].notes.add(num);
-      }
-    } else {
-      // Set value
-      newBoard[row][col].value = num;
-      newBoard[row][col].notes.clear();
-
-      // Check if incorrect: duplicates are always marked, solution check depends on showIncorrect
-      const isDuplicate = hasDuplicate(newBoard, row, col);
-      const isIncorrectValue = state.showIncorrect && !validateCell(newBoard, state.solution, row, col);
-      newBoard[row][col].isIncorrect = isDuplicate || isIncorrectValue;
-    }
-
-    const complete = isBoardComplete(newBoard, state.solution);
-
-    // Add to history
-    const newHistory = state.history.slice(0, state.historyIndex + 1);
-    newHistory.push(newBoard);
-
-    return {
-      ...state,
-      board: newBoard,
-      isComplete: complete,
-      history: newHistory,
-      historyIndex: newHistory.length - 1
-    };
-  };
-
-  // Pure state-transition: clear a cell
-  const applyClearCell = (state: GameState, row: number, col: number): GameState => {
-    if (state.isComplete || state.board[row][col].isInitial) {
-      return state;
-    }
-
-    const newBoard = state.board.map(r => r.map(c => ({ ...c, notes: new Set(c.notes) })));
-    newBoard[row][col].value = null;
-    newBoard[row][col].isIncorrect = false;
-    newBoard[row][col].notes.clear();
-
-    // Add to history
-    const newHistory = state.history.slice(0, state.historyIndex + 1);
-    newHistory.push(newBoard);
-
-    return {
-      ...state,
-      board: newBoard,
-      history: newHistory,
-      historyIndex: newHistory.length - 1
-    };
-  };
-
-  // Handle cell selection — all state reads from prev, no stale closure
-  const handleCellClick = useCallback((row: number, col: number): void => {
-    setGameState(prev => {
-      if (prev.inputMode === 'number-first') {
-        if (prev.board[row][col].isInitial) return prev;
-
-        if (prev.selectedNumber === 0) {
-          return applyClearCell(prev, row, col);
-        } else if (prev.selectedNumber !== null) {
-          return applyNumberInput(prev, row, col, prev.selectedNumber);
-        }
-        return prev;
-      } else {
-        // In cell-first mode, clicking a cell selects it (including initial cells for highlighting)
-        return { ...prev, selectedCell: { row, col } };
-      }
-    });
-  }, []);
-
-  // Handle number input — all state reads from prev, no stale closure
-  const handleNumberInput = useCallback(
-    (num: number): void => {
-      setGameState(prev => {
-        if (prev.inputMode === 'number-first') {
-          // In number-first mode, clicking a number selects it
-          return {
-            ...prev,
-            selectedNumber: prev.selectedNumber === num ? null : num
-          };
-        } else {
-          // In cell-first mode, clicking a number fills the selected cell
-          if (
-            !prev.selectedCell ||
-            prev.isComplete ||
-            prev.board[prev.selectedCell.row][prev.selectedCell.col].isInitial
-          ) {
-            return prev;
-          }
-
-          const { row, col } = prev.selectedCell;
-          return applyNumberInput(prev, row, col, num);
-        }
-      });
-    },
-    []
+  const handleCellClick = useCallback(
+    (row: number, col: number): void => dispatch({ type: 'CELL_CLICKED', row, col }),
+    [dispatch]
   );
 
-  // Handle cell clear — all state reads from prev, no stale closure
-  const handleClearCell = useCallback((): void => {
-    setGameState(prev => {
-      if (prev.inputMode === 'number-first') {
-        // In number-first mode, toggle clear mode (0 represents clear)
-        return {
-          ...prev,
-          selectedNumber: prev.selectedNumber === 0 ? null : 0
-        };
-      } else {
-        // In cell-first mode, clear the selected cell
-        if (
-          !prev.selectedCell ||
-          prev.isComplete ||
-          prev.board[prev.selectedCell.row][prev.selectedCell.col].isInitial
-        ) {
-          return prev;
-        }
+  const handleNumberInput = useCallback(
+    (num: number): void => dispatch({ type: 'NUMBER_CLICKED', num }),
+    [dispatch]
+  );
 
-        const { row, col } = prev.selectedCell;
-        return applyClearCell(prev, row, col);
-      }
-    });
-  }, []);
+  const handleClearCell = useCallback(
+    (): void => dispatch({ type: 'CLEAR_CLICKED' }),
+    [dispatch]
+  );
 
   // Keyboard navigation
   useEffect(() => {

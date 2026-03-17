@@ -42,3 +42,8 @@ export interface GameState {
   selectedNumber: number | null;
   highlightNotes: boolean;
 }
+
+export type GameAction =
+  | { type: 'CELL_CLICKED'; row: number; col: number }
+  | { type: 'NUMBER_CLICKED'; num: number }
+  | { type: 'CLEAR_CLICKED' };
