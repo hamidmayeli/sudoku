@@ -229,6 +229,32 @@ export const Game: React.FC = () => {
     setGameStarted(true);
   };
 
+  const handleRestartGame = (): void => {
+    setGameState(prev => {
+      const restartedBoard = prev.board.map(row =>
+        row.map(cell => ({
+          ...cell,
+          value: cell.isInitial ? cell.value : null,
+          notes: new Set<number>(),
+          isIncorrect: false
+        }))
+      );
+
+      return {
+        ...prev,
+        board: restartedBoard,
+        selectedCell: null,
+        notesMode: false,
+        isComplete: false,
+        history: [restartedBoard],
+        historyIndex: 0,
+        snapshots: [],
+        selectedNumber: null
+      };
+    });
+    setCurrentHint(null);
+  };
+
   // Toggle show incorrect
   const handleToggleIncorrect = (): void => {
     setGameState(prev => {
@@ -462,9 +488,11 @@ export const Game: React.FC = () => {
         canUndo={gameState.historyIndex > 0}
         canRedo={gameState.historyIndex < gameState.history.length - 1}
         hasSnapshots={gameState.snapshots.length > 0}
+        snapshotCount={gameState.snapshots.length}
         inputMode={gameState.inputMode}
         highlightNotes={gameState.highlightNotes}
         onNewGame={handleNewGame}
+        onRestartGame={handleRestartGame}
         onToggleIncorrect={handleToggleIncorrect}
         onToggleNotes={handleToggleNotes}
         onToggleTheme={toggleTheme}
