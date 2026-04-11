@@ -996,6 +996,7 @@ export const findXYWing = (board: Board): HintResult | null => {
   // Try to find XY-Wing pattern
   for (const pivot of biValueCells) {
     const [X, Y] = pivot.candidates;
+    const pivotCands = new Set(pivot.candidates);
     
     // Find wings that share a candidate with pivot
     const wings: typeof biValueCells = [];
@@ -1024,54 +1025,64 @@ export const findXYWing = (board: Board): HintResult | null => {
       for (let j = i + 1; j < wings.length; j++) {
         const w1 = wings[i];
         const w2 = wings[j];
-        
-        const pivotCands = new Set(pivot.candidates);
-        
-        // Check if wings form valid XY-Wing
-        const allCands = new Set([...w1.candidates, ...w2.candidates, ...pivot.candidates]);
-        if (allCands.size === 3) {
-          // Find the common candidate between wings (the one to eliminate)
-          const Z = w1.candidates.find(c => w2.candidates.includes(c) && !pivotCands.has(c));
-          if (Z) {
-            const eliminationMap = new Map<string, Set<number>>();
-            
-            // Find cells that see both wings
-            for (let row = 0; row < 9; row++) {
-              for (let col = 0; col < 9; col++) {
-                if ((row === w1.row && col === w1.col) || (row === w2.row && col === w2.col)) continue;
-                
-                const seesW1 = row === w1.row || col === w1.col ||
-                              (Math.floor(row / 3) === Math.floor(w1.row / 3) &&
-                               Math.floor(col / 3) === Math.floor(w1.col / 3));
-                const seesW2 = row === w2.row || col === w2.col ||
-                              (Math.floor(row / 3) === Math.floor(w2.row / 3) &&
-                               Math.floor(col / 3) === Math.floor(w2.col / 3));
-                
-                if (seesW1 && seesW2) {
-                  const key = `${row},${col}`;
-                  if (allCandidates.has(key) && allCandidates.get(key)!.has(Z)) {
-                    eliminationMap.set(key, new Set([Z]));
-                  }
-                }
+        const w1SharedWithPivot = w1.candidates.find(c => pivotCands.has(c));
+        const w2SharedWithPivot = w2.candidates.find(c => pivotCands.has(c));
+        if (!w1SharedWithPivot || !w2SharedWithPivot) continue;
+
+        // A valid XY-Wing needs wings tied to different pivot candidates.
+        if (w1SharedWithPivot === w2SharedWithPivot) continue;
+
+        const w1Other = w1.candidates.find(c => !pivotCands.has(c));
+        const w2Other = w2.candidates.find(c => !pivotCands.has(c));
+        if (!w1Other || !w2Other) continue;
+
+        // Wings must share the same non-pivot candidate Z.
+        if (w1Other !== w2Other) continue;
+
+        const Z = w1Other;
+        const eliminationMap = new Map<string, Set<number>>();
+
+        // Find cells that see both wings
+        for (let row = 0; row < 9; row++) {
+          for (let col = 0; col < 9; col++) {
+            if (
+              (row === w1.row && col === w1.col) ||
+              (row === w2.row && col === w2.col) ||
+              (row === pivot.row && col === pivot.col)
+            ) {
+              continue;
+            }
+
+            const seesW1 = row === w1.row || col === w1.col ||
+                          (Math.floor(row / 3) === Math.floor(w1.row / 3) &&
+                           Math.floor(col / 3) === Math.floor(w1.col / 3));
+            const seesW2 = row === w2.row || col === w2.col ||
+                          (Math.floor(row / 3) === Math.floor(w2.row / 3) &&
+                           Math.floor(col / 3) === Math.floor(w2.col / 3));
+
+            if (seesW1 && seesW2) {
+              const key = `${row},${col}`;
+              if (allCandidates.has(key) && allCandidates.get(key)!.has(Z)) {
+                eliminationMap.set(key, new Set([Z]));
               }
             }
-            
-            if (eliminationMap.size > 0) {
-              const result = applyCandidateElimination(allCandidates, eliminationMap);
-              if (result) {
-                return {
-                  ...result,
-                  strategy: 'XY-Wing',
-                  explanation: `An XY-Wing pattern was found with pivot at (${pivot.row + 1},${pivot.col + 1}) containing ${pivot.candidates.join('/')} and wings at (${w1.row + 1},${w1.col + 1}) and (${w2.row + 1},${w2.col + 1}). This pattern allows eliminating ${Z} from cells that can see both wings. After elimination, cell at row ${result.row + 1}, column ${result.col + 1} must be ${result.value}.`,
-                  affectedCells: [
-                    { row: pivot.row, col: pivot.col },
-                    { row: w1.row, col: w1.col },
-                    { row: w2.row, col: w2.col }
-                  ],
-                  highlightedRegions: []
-                };
-              }
-            }
+          }
+        }
+
+        if (eliminationMap.size > 0) {
+          const result = applyCandidateElimination(allCandidates, eliminationMap);
+          if (result) {
+            return {
+              ...result,
+              strategy: 'XY-Wing',
+              explanation: `An XY-Wing pattern was found with pivot at (${pivot.row + 1},${pivot.col + 1}) containing ${pivot.candidates.join('/')} and wings at (${w1.row + 1},${w1.col + 1}) and (${w2.row + 1},${w2.col + 1}). This pattern allows eliminating ${Z} from cells that can see both wings. After elimination, cell at row ${result.row + 1}, column ${result.col + 1} must be ${result.value}.`,
+              affectedCells: [
+                { row: pivot.row, col: pivot.col },
+                { row: w1.row, col: w1.col },
+                { row: w2.row, col: w2.col }
+              ],
+              highlightedRegions: []
+            };
           }
         }
       }
@@ -1277,46 +1288,51 @@ export const findInvalidNote = (board: Board): HintResult | null => {
 
 // Main hint function - tries strategies in order of complexity
 export const getAdvancedHint = (board: Board, solution: number[][]): HintResult | null => {
+  const isHintConsistent = (hint: HintResult): boolean => {
+    if (hint.action === 'remove-note') return true;
+    return solution[hint.row][hint.col] === hint.value;
+  };
+
   // First priority: Remove invalid notes
   let hint = findInvalidNote(board);
   if (hint) return hint;
 
   // Try strategies in order of simplicity
   hint = findNakedSingle(board);
-  if (hint) return hint;
+  if (hint && isHintConsistent(hint)) return hint;
 
   hint = findHiddenSingle(board);
-  if (hint) return hint;
+  if (hint && isHintConsistent(hint)) return hint;
 
   hint = findPointingPair(board);
-  if (hint) return hint;
+  if (hint && isHintConsistent(hint)) return hint;
 
   hint = findBoxLineReduction(board);
-  if (hint) return hint;
+  if (hint && isHintConsistent(hint)) return hint;
 
   hint = findNakedPair(board);
-  if (hint) return hint;
+  if (hint && isHintConsistent(hint)) return hint;
 
   hint = findHiddenPair(board);
-  if (hint) return hint;
+  if (hint && isHintConsistent(hint)) return hint;
 
   hint = findNakedTriple(board);
-  if (hint) return hint;
+  if (hint && isHintConsistent(hint)) return hint;
 
   hint = findNakedQuad(board);
-  if (hint) return hint;
+  if (hint && isHintConsistent(hint)) return hint;
 
   hint = findXWing(board);
-  if (hint) return hint;
+  if (hint && isHintConsistent(hint)) return hint;
 
   hint = findSwordfish(board);
-  if (hint) return hint;
+  if (hint && isHintConsistent(hint)) return hint;
 
   hint = findXYWing(board);
-  if (hint) return hint;
+  if (hint && isHintConsistent(hint)) return hint;
 
   hint = findUniqueRectangle(board);
-  if (hint) return hint;
+  if (hint && isHintConsistent(hint)) return hint;
 
   // If no logical hint found, fall back to a random correct cell
   const emptyCells: { row: number; col: number }[] = [];
