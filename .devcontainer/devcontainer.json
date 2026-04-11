@@ -1,0 +1,14 @@
+{
+  "name": "Sudoku",
+  "image": "node:lts-bookworm",
+  "postCreateCommand": "corepack enable && corepack prepare pnpm@latest --activate && pnpm install && pnpm add -D typescript@latest",
+  "forwardPorts": [5173],
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-vscode.vscode-typescript-next",
+        "pnpm.pnpm-vscode-extension"
+      ]
+    }
+  }
+}
