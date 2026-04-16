@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import type { Difficulty, GameState } from '../types/sudoku.types';
+import type { Difficulty } from '../types/sudoku.types';
+import { exportGameState } from '../services/gameStorage';
 
 interface ControlsProps {
   showIncorrect: boolean;
@@ -54,19 +55,15 @@ export const Controls: React.FC<ControlsProps> = ({
 }) => {
   const [showDifficultyMenu, setShowDifficultyMenu] = useState<ExpandableSection>(null);
 
-  const exportStateToClipboard = () => {
-    const json = localStorage.getItem('sudoku-game-state');
-      if (json) {
-        const state = JSON.parse(json) as GameState;
-        state.history = [];
-        state.snapshots = [];
-
-        navigator.clipboard.writeText(JSON.stringify(state))
+  const exportStateToClipboard = async () => {
+    const json = await exportGameState();
+    if (json) {
+      navigator.clipboard.writeText(json)
         .then(() => alert('State exported to clipboard!'))
         .catch(() => alert('Failed to copy to clipboard'));
-      } else {
-        alert('No state found in localStorage');
-      }
+    } else {
+      alert('No state found in storage');
+    }
   };
 
   return (

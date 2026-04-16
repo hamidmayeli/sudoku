@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Board } from './Board';
 import { Controls } from './Controls';
 import { Keypad } from './Keypad';
@@ -14,138 +14,161 @@ import {
   recalculateIncorrectCells
 } from '../utils/sudoku';
 import { getAdvancedHint } from '../utils/hintSolver';
+import {
+  loadGameCore,
+  saveGameCore,
+  saveGameCoreFields,
+  saveHistoryEntry,
+  loadHistoryEntry,
+  truncateHistory,
+  clearHistory,
+  saveSnapshot,
+  loadSnapshot,
+  removeLastSnapshot,
+  clearSnapshots,
+  clearAllGameData,
+  storedToBoard,
+  boardToStored,
+  type GameCoreFields,
+} from '../services/gameStorage';
 
-const STORAGE_KEY = 'sudoku-game-state';
+// ---------------------------------------------------------------------------
+// Helpers to convert between in-memory GameState and StoredGameCore
+// ---------------------------------------------------------------------------
 
-// Load game from localStorage
-const loadGameFromStorage = (): GameState | null => {
-  try {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (!saved) return null;
-    
-    const parsed = JSON.parse(saved);
-    // Restore Set objects for notes
-    parsed.board = parsed.board.map((row: { notes: number[] }[]) =>
-      row.map((cell: { notes: number[] }) => ({
-        ...cell,
-        notes: new Set(cell.notes)
-      }))
-    );
+function gameStateToCore(gs: GameState): GameCoreFields {
+  return {
+    board: boardToStored(gs.board),
+    solution: gs.solution,
+    selectedCell: gs.selectedCell,
+    difficulty: gs.difficulty,
+    showIncorrect: gs.showIncorrect,
+    notesMode: gs.notesMode,
+    isComplete: gs.isComplete,
+    historyIndex: gs.historyIndex,
+    historyLength: gs.historyLength,
+    snapshotCount: gs.snapshotCount,
+    inputMode: gs.inputMode,
+    selectedNumber: gs.selectedNumber,
+    highlightNotes: gs.highlightNotes,
+  };
+}
 
-    parsed.history = parsed.history.map((board: { notes: number[] }[][]) =>
-      board.map((row: { notes: number[] }[]) =>
-        row.map((cell: { notes: number[] }) => ({
-          ...cell,
-          notes: new Set(cell.notes)
-        }))
-      )
-    );
+function coreToGameState(core: GameCoreFields): GameState {
+  return {
+    board: storedToBoard(core.board),
+    solution: core.solution,
+    selectedCell: core.selectedCell,
+    difficulty: core.difficulty,
+    showIncorrect: core.showIncorrect,
+    notesMode: core.notesMode,
+    isComplete: core.isComplete,
+    historyIndex: core.historyIndex,
+    historyLength: core.historyLength,
+    snapshotCount: core.snapshotCount,
+    inputMode: core.inputMode,
+    selectedNumber: core.selectedNumber,
+    highlightNotes: core.highlightNotes,
+  };
+}
 
-    parsed.snapshots = parsed.snapshots.map((board: { notes: number[] }[][]) =>
-      board.map((row: { notes: number[] }[]) =>
-        row.map((cell: { notes: number[] }) => ({
-          ...cell,
-          notes: new Set(cell.notes)
-        }))
-      )
-    );
-
-    return parsed;
-  } catch (error) {
-    console.error('Failed to load game from storage:', error);
-    return null;
-  }
-};
-
-// Save game to localStorage
-const saveGameToStorage = (gameState: GameState): void => {
-  try {
-    // Convert Set objects to arrays for JSON
-    const toSave = {
-      ...gameState,
-      board: gameState.board.map(row =>
-        row.map(cell => ({
-          ...cell,
-          notes: Array.from(cell.notes)
-        }))
-      ),
-      history: gameState.history.map(board =>
-        board.map(row =>
-          row.map(cell => ({
-            ...cell,
-            notes: Array.from(cell.notes)
-          }))
-        )
-      ),
-      snapshots: gameState.snapshots.map(board =>
-        board.map(row =>
-          row.map(cell => ({
-            ...cell,
-            notes: Array.from(cell.notes)
-          }))
-        )
-      )
-    };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
-  } catch (error) {
-    console.error('Failed to save game to storage:', error);
-  }
-};
+function makeDefaultState(): GameState {
+  const { puzzle, solution } = generateGame('medium');
+  const initialBoard = convertToBoard(puzzle);
+  return {
+    board: initialBoard,
+    solution,
+    selectedCell: null,
+    difficulty: 'medium',
+    showIncorrect: false,
+    notesMode: false,
+    isComplete: false,
+    historyIndex: 0,
+    historyLength: 1,
+    snapshotCount: 0,
+    inputMode: 'number-first',
+    selectedNumber: null,
+    highlightNotes: true,
+  };
+}
 
 export const Game: React.FC = () => {
   const { theme, toggleTheme } = useTheme();
-  const [gameStarted, setGameStarted] = useState(() => {
-    const saved = loadGameFromStorage();
-    return !!saved;
-  });
+  const [loading, setLoading] = useState(true);
+  const [gameStarted, setGameStarted] = useState(false);
   const [currentHint, setCurrentHint] = useState<HintResult | null>(null);
-  
-  const [gameState, setGameState] = useState<GameState>(() => {
-    // Try to load from localStorage first
-    const saved = loadGameFromStorage();
-    if (saved) {
-      // Ensure history and snapshots exist
-      return {
-        ...saved,
-        history: saved.history || [saved.board],
-        historyIndex: saved.historyIndex ?? 0,
-        snapshots: saved.snapshots || [],
-        inputMode: saved.inputMode || 'cell-first',
-        selectedNumber: saved.selectedNumber || null
-      };
-    }
-    
-    // Generate new game if no saved state
-    const { puzzle, solution } = generateGame('medium');
-    const initialBoard = convertToBoard(puzzle);
-    return {
-      board: initialBoard,
-      solution,
-      selectedCell: null,
-      difficulty: 'medium',
-      showIncorrect: false,
-      notesMode: false,
-      isComplete: false,
-      history: [initialBoard],
-      historyIndex: 0,
-      snapshots: [],
-      inputMode: 'number-first',
-      selectedNumber: null,
-      highlightNotes: true
-    };
-  });
+  const [gameState, setGameState] = useState<GameState>(makeDefaultState);
 
-  // Save to localStorage whenever game state changes
+  // Track previous state for persistence diffing
+  const prevStateRef = useRef<GameState | null>(null);
+
+  // --- Initial load from IndexedDB ---
   useEffect(() => {
-    if(gameState.isComplete) {
-      localStorage.removeItem(STORAGE_KEY);
-    }
-    else {
-      saveGameToStorage(gameState);
-    }
-  }, [gameState]);
+    (async () => {
+      const core = await loadGameCore();
+      if (core) {
+        setGameState(coreToGameState(core));
+        setGameStarted(true);
+      }
+      setLoading(false);
+    })();
+  }, []);
 
-  // --- Event bus: all cell/number/clear actions flow through here ---
+  // --- Persist changes to IndexedDB ---
+  useEffect(() => {
+    if (loading) return;
+
+    const prev = prevStateRef.current;
+    prevStateRef.current = gameState;
+
+    // Nothing to persist until first real state
+    if (!prev) {
+      // Initial save after load
+      if (!gameState.isComplete) {
+        saveGameCore(gameStateToCore(gameState));
+      }
+      return;
+    }
+
+    if (gameState.isComplete) {
+      clearAllGameData();
+      return;
+    }
+
+    // Build a partial update with only the fields that changed
+    const delta: Partial<GameCoreFields> = {};
+    if (prev.board !== gameState.board) delta.board = boardToStored(gameState.board);
+    if (prev.selectedCell !== gameState.selectedCell) delta.selectedCell = gameState.selectedCell;
+    if (prev.showIncorrect !== gameState.showIncorrect) delta.showIncorrect = gameState.showIncorrect;
+    if (prev.notesMode !== gameState.notesMode) delta.notesMode = gameState.notesMode;
+    if (prev.inputMode !== gameState.inputMode) delta.inputMode = gameState.inputMode;
+    if (prev.selectedNumber !== gameState.selectedNumber) delta.selectedNumber = gameState.selectedNumber;
+    if (prev.highlightNotes !== gameState.highlightNotes) delta.highlightNotes = gameState.highlightNotes;
+    if (prev.historyIndex !== gameState.historyIndex) delta.historyIndex = gameState.historyIndex;
+    if (prev.historyLength !== gameState.historyLength) delta.historyLength = gameState.historyLength;
+    if (prev.snapshotCount !== gameState.snapshotCount) delta.snapshotCount = gameState.snapshotCount;
+
+    if (Object.keys(delta).length > 0) {
+      saveGameCoreFields(delta);
+    }
+
+    // If board changed and a new history entry was added (not undo/redo)
+    if (
+      prev.board !== gameState.board &&
+      gameState.historyLength > prev.historyLength
+    ) {
+      // Truncate old future entries then save new one
+      const saveOps = async () => {
+        if (prev.historyIndex < prev.historyLength - 1) {
+          await truncateHistory(prev.historyIndex);
+        }
+        await saveHistoryEntry(gameState.historyIndex, gameState.board);
+      };
+      saveOps();
+    }
+  }, [gameState, loading]);
+
+  // --- Event bus ---
   const dispatch = useGameEventBus(setGameState);
 
   const handleCellClick = useCallback(
@@ -208,10 +231,11 @@ export const Game: React.FC = () => {
   }, [handleNumberInput, handleClearCell, gameState.selectedCell, gameState.isComplete]);
 
   // Start new game
-  const handleNewGame = (difficulty: Difficulty): void => {
+  const handleNewGame = async (difficulty: Difficulty): Promise<void> => {
+    await clearAllGameData();
     const { puzzle, solution } = generateGame(difficulty);
     const initialBoard = convertToBoard(puzzle);
-    setGameState({
+    const newState: GameState = {
       board: initialBoard,
       solution,
       selectedCell: null,
@@ -219,17 +243,25 @@ export const Game: React.FC = () => {
       showIncorrect: gameState.showIncorrect,
       notesMode: false,
       isComplete: false,
-      history: [initialBoard],
       historyIndex: 0,
-      snapshots: [],
+      historyLength: 1,
+      snapshotCount: 0,
       inputMode: gameState.inputMode,
       selectedNumber: null,
-      highlightNotes: true
-    });
+      highlightNotes: true,
+    };
+    setGameState(newState);
     setGameStarted(true);
+
+    // Persist initial state
+    await saveGameCore(gameStateToCore(newState));
+    await saveHistoryEntry(0, initialBoard);
   };
 
-  const handleRestartGame = (): void => {
+  const handleRestartGame = async (): Promise<void> => {
+    await clearHistory();
+    await clearSnapshots();
+
     setGameState(prev => {
       const restartedBoard = prev.board.map(row =>
         row.map(cell => ({
@@ -240,17 +272,22 @@ export const Game: React.FC = () => {
         }))
       );
 
-      return {
+      const newState: GameState = {
         ...prev,
         board: restartedBoard,
         selectedCell: null,
         notesMode: false,
         isComplete: false,
-        history: [restartedBoard],
         historyIndex: 0,
-        snapshots: [],
-        selectedNumber: null
+        historyLength: 1,
+        snapshotCount: 0,
+        selectedNumber: null,
       };
+
+      // Save initial history entry
+      saveHistoryEntry(0, restartedBoard);
+
+      return newState;
     });
     setCurrentHint(null);
   };
@@ -283,7 +320,7 @@ export const Game: React.FC = () => {
     setGameState(prev => ({
       ...prev,
       inputMode: prev.inputMode === 'cell-first' ? 'number-first' : 'cell-first',
-      selectedNumber: null // Clear selected number when switching modes
+      selectedNumber: null
     }));
   };
 
@@ -295,14 +332,11 @@ export const Game: React.FC = () => {
     }));
   };
 
-  // Get hint - show explanation modal
+  // Get hint
   const handleHint = (): void => {
     if (gameState.isComplete) return;
-
     const hint = getAdvancedHint(gameState.board, gameState.solution);
     if (!hint) return;
-
-    // Select the hint cell and show modal
     setGameState(prev => ({
       ...prev,
       selectedCell: { row: hint.row, col: hint.col }
@@ -310,17 +344,15 @@ export const Game: React.FC = () => {
     setCurrentHint(hint);
   };
 
-  // Apply the hint to the board
+  // Apply hint
   const applyHint = (): void => {
     if (!currentHint) return;
-
     const { row, col, value, action, invalidNotes, allCellsWithInvalidNotes } = currentHint;
 
     setGameState(prev => {
       const newBoard = prev.board.map(r => r.map(c => ({ ...c, notes: new Set(c.notes) })));
       
       if (action === 'remove-note') {
-        // Remove invalid notes from all cells that have them
         if (allCellsWithInvalidNotes && allCellsWithInvalidNotes.length > 0) {
           allCellsWithInvalidNotes.forEach(cellInfo => {
             cellInfo.invalidNotes.forEach(note => {
@@ -328,126 +360,128 @@ export const Game: React.FC = () => {
             });
           });
         } else {
-          // Fallback to single cell
           const notesToRemove = invalidNotes || [value];
           notesToRemove.forEach(note => {
             newBoard[row][col].notes.delete(note);
           });
         }
       } else {
-        // Add value to cell (default behavior)
         newBoard[row][col].value = prev.solution[row][col];
         newBoard[row][col].isIncorrect = false;
         newBoard[row][col].notes.clear();
       }
 
       const complete = isBoardComplete(newBoard, prev.solution);
+      const newHistoryIndex = prev.historyIndex + 1;
 
-      // Add to history
-      const newHistory = prev.history.slice(0, prev.historyIndex + 1);
-      newHistory.push(newBoard);
+      // Save new history entry
+      saveHistoryEntry(newHistoryIndex, newBoard);
+      if (prev.historyIndex < prev.historyLength - 1) {
+        truncateHistory(prev.historyIndex);
+      }
 
       return {
         ...prev,
         board: newBoard,
         isComplete: complete,
-        history: newHistory,
-        historyIndex: newHistory.length - 1
+        historyIndex: newHistoryIndex,
+        historyLength: newHistoryIndex + 1,
       };
     });
 
     setCurrentHint(null);
   };
 
-  // Close hint modal without applying
   const closeHint = (): void => {
     setCurrentHint(null);
   };
 
-  // Undo
-  const handleUndo = (): void => {
-    if (gameState.historyIndex > 0) {
-      setGameState(prev => {
-        const newIndex = prev.historyIndex - 1;
-        const boardToRestore = prev.history[newIndex];
-        recalculateIncorrectCells(boardToRestore, prev.solution, prev.showIncorrect);
-        const complete = isBoardComplete(boardToRestore, prev.solution);
-        
-        return {
-          ...prev,
-          board: boardToRestore,
-          historyIndex: newIndex,
-          isComplete: complete
-        };
-      });
-    }
+  // Undo — load board from IndexedDB
+  const handleUndo = async (): Promise<void> => {
+    if (gameState.historyIndex <= 0) return;
+    const newIndex = gameState.historyIndex - 1;
+    const board = await loadHistoryEntry(newIndex);
+    if (!board) return;
+
+    setGameState(prev => {
+      recalculateIncorrectCells(board, prev.solution, prev.showIncorrect);
+      const complete = isBoardComplete(board, prev.solution);
+      return {
+        ...prev,
+        board,
+        historyIndex: newIndex,
+        isComplete: complete,
+      };
+    });
   };
 
-  // Redo
-  const handleRedo = (): void => {
-    if (gameState.historyIndex < gameState.history.length - 1) {
-      setGameState(prev => {
-        const newIndex = prev.historyIndex + 1;
-        const boardToRestore = prev.history[newIndex];
-        recalculateIncorrectCells(boardToRestore, prev.solution, prev.showIncorrect);
-        const complete = isBoardComplete(boardToRestore, prev.solution);
-        
-        return {
-          ...prev,
-          board: boardToRestore,
-          historyIndex: newIndex,
-          isComplete: complete
-        };
-      });
-    }
+  // Redo — load board from IndexedDB
+  const handleRedo = async (): Promise<void> => {
+    if (gameState.historyIndex >= gameState.historyLength - 1) return;
+    const newIndex = gameState.historyIndex + 1;
+    const board = await loadHistoryEntry(newIndex);
+    if (!board) return;
+
+    setGameState(prev => {
+      recalculateIncorrectCells(board, prev.solution, prev.showIncorrect);
+      const complete = isBoardComplete(board, prev.solution);
+      return {
+        ...prev,
+        board,
+        historyIndex: newIndex,
+        isComplete: complete,
+      };
+    });
   };
 
   // Take snapshot
   const handleTakeSnapshot = (): void => {
     setGameState(prev => {
       const currentBoard = prev.board.map(r => r.map(c => ({ ...c, notes: new Set(c.notes) })));
+      const newCount = prev.snapshotCount + 1;
+      saveSnapshot(prev.snapshotCount, currentBoard);
       return {
         ...prev,
-        snapshots: [...prev.snapshots, currentBoard]
+        snapshotCount: newCount,
       };
     });
   };
 
   // Undo to last snapshot
-  const handleUndoToSnapshot = (): void => {
-    if (gameState.snapshots.length > 0) {
-      setGameState(prev => {
-        const lastSnapshot = prev.snapshots[prev.snapshots.length - 1];
-        const newSnapshots = prev.snapshots.slice(0, -1);
-        recalculateIncorrectCells(lastSnapshot, prev.solution, prev.showIncorrect);
-        const complete = isBoardComplete(lastSnapshot, prev.solution);
-        
-        // Add to history
-        const newHistory = prev.history.slice(0, prev.historyIndex + 1);
-        newHistory.push(lastSnapshot);
-        
-        return {
-          ...prev,
-          board: lastSnapshot,
-          snapshots: newSnapshots,
-          history: newHistory,
-          historyIndex: newHistory.length - 1,
-          isComplete: complete
-        };
-      });
-    }
+  const handleUndoToSnapshot = async (): Promise<void> => {
+    if (gameState.snapshotCount <= 0) return;
+    const snapIndex = gameState.snapshotCount - 1;
+    const board = await loadSnapshot(snapIndex);
+    if (!board) return;
+
+    await removeLastSnapshot(gameState.snapshotCount);
+
+    setGameState(prev => {
+      recalculateIncorrectCells(board, prev.solution, prev.showIncorrect);
+      const complete = isBoardComplete(board, prev.solution);
+      const newHistoryIndex = prev.historyIndex + 1;
+
+      // Save to history
+      saveHistoryEntry(newHistoryIndex, board);
+      if (prev.historyIndex < prev.historyLength - 1) {
+        truncateHistory(prev.historyIndex);
+      }
+
+      return {
+        ...prev,
+        board,
+        snapshotCount: snapIndex,
+        historyIndex: newHistoryIndex,
+        historyLength: newHistoryIndex + 1,
+        isComplete: complete,
+      };
+    });
   };
 
-  // Calculate which digits are fully filled (appear 9 times)
+  // Disabled digits
   const getDisabledDigits = (): Set<number> => {
-    // Don't disable digits when in notes mode
-    if (gameState.notesMode) {
-      return new Set<number>();
-    }
-    
+    if (gameState.notesMode) return new Set<number>();
     const digitCounts = new Map<number, number>();
-    
-    // Count occurrences of each digit
     for (let row = 0; row < 9; row++) {
       for (let col = 0; col < 9; col++) {
         const value = gameState.board[row][col].value;
@@ -456,17 +490,16 @@ export const Game: React.FC = () => {
         }
       }
     }
-    
-    // Find digits that appear 9 times
     const disabled = new Set<number>();
     for (let digit = 1; digit <= 9; digit++) {
-      if (digitCounts.get(digit) === 9) {
-        disabled.add(digit);
-      }
+      if (digitCounts.get(digit) === 9) disabled.add(digit);
     }
-    
     return disabled;
   };
+
+  if (loading) {
+    return <div className="game-container"><p>Loading…</p></div>;
+  }
 
   if (!gameStarted) {
     return (
@@ -486,9 +519,9 @@ export const Game: React.FC = () => {
         isComplete={gameState.isComplete}
         theme={theme}
         canUndo={gameState.historyIndex > 0}
-        canRedo={gameState.historyIndex < gameState.history.length - 1}
-        hasSnapshots={gameState.snapshots.length > 0}
-        snapshotCount={gameState.snapshots.length}
+        canRedo={gameState.historyIndex < gameState.historyLength - 1}
+        hasSnapshots={gameState.snapshotCount > 0}
+        snapshotCount={gameState.snapshotCount}
         inputMode={gameState.inputMode}
         highlightNotes={gameState.highlightNotes}
         onNewGame={handleNewGame}

@@ -35,9 +35,9 @@ export interface GameState {
   showIncorrect: boolean;
   notesMode: boolean;
   isComplete: boolean;
-  history: Board[];
   historyIndex: number;
-  snapshots: Board[];
+  historyLength: number;
+  snapshotCount: number;
   inputMode: InputMode;
   selectedNumber: number | null;
   highlightNotes: boolean;

@@ -36,15 +36,14 @@ export const applyNumberInput = (
 
   const complete = isBoardComplete(newBoard, state.solution);
 
-  const newHistory = state.history.slice(0, state.historyIndex + 1);
-  newHistory.push(newBoard);
+  const newHistoryIndex = state.historyIndex + 1;
 
   return {
     ...state,
     board: newBoard,
     isComplete: complete,
-    history: newHistory,
-    historyIndex: newHistory.length - 1,
+    historyIndex: newHistoryIndex,
+    historyLength: newHistoryIndex + 1,
   };
 };
 
@@ -63,14 +62,13 @@ export const applyClearCell = (
   newBoard[row][col].isIncorrect = false;
   newBoard[row][col].notes.clear();
 
-  const newHistory = state.history.slice(0, state.historyIndex + 1);
-  newHistory.push(newBoard);
+  const newHistoryIndex = state.historyIndex + 1;
 
   return {
     ...state,
     board: newBoard,
-    history: newHistory,
-    historyIndex: newHistory.length - 1,
+    historyIndex: newHistoryIndex,
+    historyLength: newHistoryIndex + 1,
   };
 };
 
